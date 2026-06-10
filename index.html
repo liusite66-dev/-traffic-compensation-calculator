@@ -1,0 +1,2213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交通事故赔偿计算器</title>
+<script src="exceljs.min.js"></script>
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, sans-serif;
+  background: #f1f3f4; color: #202124;
+  min-height: 100vh; display: flex; flex-direction: column;
+}
+
+/* ── Color Variables ── */
+:root {
+  --header-bg: #1a73e8;
+  --header-fg: #ffffff;
+  --accent: #1a73e8;
+  --accent-hover: #1557b0;
+  --card-bg: #ffffff;
+  --card-border: #dadce0;
+  --surface: #f8f9fa;
+  --text-primary: #202124;
+  --text-secondary: #5f6368;
+  --success-bg: #e6f4ea;
+  --success-fg: #137333;
+  --danger: #d93025;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+}
+
+/* ── Layout ── */
+.app-header {
+  background: var(--header-bg); color: var(--header-fg);
+  display: flex; align-items: center; padding: 0 24px;
+  height: 56px; flex-shrink: 0; gap: 16px;
+}
+.app-header h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+.app-header .spacer { flex: 1; }
+.plaintiff-area { display: flex; align-items: center; gap: 8px; }
+.plaintiff-area label { font-size: 14px; font-weight: 700; opacity: 0.95; }
+.plaintiff-area input {
+  width: 180px; height: 32px; padding: 0 12px;
+  border: none; border-radius: 4px; font-size: 14px; font-weight: 600;
+  background: #fff; color: #202124; outline: none;
+}
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex; background: #fff;
+  border-bottom: 1px solid var(--card-border);
+  padding: 0 16px; gap: 0; flex-shrink: 0;
+  position: sticky; top: 0; z-index: 10;
+}
+.tab-btn {
+  padding: 12px 20px; font-size: 14px; font-weight: 700;
+  color: var(--text-secondary); background: transparent;
+  border: none; cursor: pointer; position: relative;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--accent); }
+.tab-btn.active::after {
+  content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
+  height: 3px; background: var(--accent); border-radius: 3px 3px 0 0;
+}
+
+/* ── Main Content ── */
+main { flex: 1; padding: 16px 20px; max-width: 1200px; margin: 0 auto; width: 100%; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Card ── */
+.card {
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: var(--radius); padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-size: 16px; font-weight: 700; color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+/* ── Data Table Grid ── */
+.data-grid {
+  display: grid; gap: 2px 0;
+  grid-template-columns: 140px 1fr 1fr;
+  align-items: center;
+}
+.data-grid .header {
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  padding: 4px 8px 8px 8px; text-align: left;
+}
+.data-grid .header:nth-child(2),
+.data-grid .header:nth-child(3) { text-align: center; }
+.data-grid .label {
+  font-size: 14px; color: var(--text-primary);
+  padding: 5px 8px; font-weight: 500;
+}
+.data-grid .input-cell {
+  display: flex; justify-content: center; padding: 3px 4px;
+}
+.data-grid .input-cell.end-cell { justify-content: center; }
+
+.data-grid input[type="number"],
+.data-grid input[type="text"] {
+  width: 130px; height: 34px; padding: 0 10px;
+  border: 1px solid var(--card-border); border-radius: 6px;
+  font-size: 14px; font-family: inherit; color: var(--text-primary);
+  background: #fff; outline: none; transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+.data-grid input[type="number"]::-webkit-outer-spin-button,
+.data-grid input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.data-grid input[type="number"]:focus,
+.data-grid input[type="text"]:focus { border-color: var(--accent); }
+.data-grid input.readonly {
+  background: var(--success-bg); border-color: transparent;
+  font-weight: 700; color: var(--success-fg); cursor: default;
+}
+.data-grid input.readonly:focus { border-color: var(--success-bg); }
+.data-grid input.highlight {
+  background: var(--success-bg); border-color: transparent;
+  font-weight: 700; color: var(--accent); cursor: default;
+}
+.data-grid input.highlight:focus { border-color: var(--success-bg); }
+
+/* ── Subtotal Row ── */
+.subtotal-row { background: var(--success-bg); border-radius: 6px; margin-top: 4px; }
+.subtotal-row .label { font-weight: 700; color: var(--accent); }
+.subtotal-row input { background: transparent !important; border-color: transparent !important; font-weight: 700; color: var(--success-fg) !important; }
+
+/* ── Detail Rows (Medical) ── */
+.detail-section { margin-top: 8px; padding-left: 8px; border-left: 3px solid var(--card-border); }
+.detail-header { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+.detail-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.detail-row input[type="text"],
+.detail-row input[type="number"] {
+  width: 130px; height: 30px; padding: 0 8px;
+  border: 1px solid var(--card-border); border-radius: 4px;
+  font-size: 13px; font-family: inherit; outline: none;
+}
+.detail-row input:focus { border-color: var(--accent); }
+.detail-row .del-btn {
+  width: 28px; height: 28px; border: none; border-radius: 4px;
+  background: var(--danger); color: #fff; font-size: 16px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  line-height: 1; font-family: inherit;
+}
+.detail-row .del-btn:hover { background: #c62828; }
+.detail-total { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+.add-btn {
+  height: 30px; padding: 0 14px; border: 1px solid var(--card-border);
+  border-radius: 6px; background: #fff; font-size: 13px; font-weight: 600;
+  color: var(--accent); cursor: pointer; font-family: inherit; margin-top: 4px;
+}
+.add-btn:hover { background: var(--surface); }
+
+/* ── Nutrition Section ── */
+.nutrition-row { display: flex; align-items: center; gap: 8px; padding: 4px 0 4px 12px; }
+.nutrition-row label { font-size: 13px; color: var(--text-primary); font-weight: 500; white-space: nowrap; }
+.nutrition-row input { width: 80px; height: 30px; padding: 0 8px; border: 1px solid var(--card-border); border-radius: 4px; font-size: 13px; font-family: inherit; outline: none; text-align: center; }
+.nutrition-row input:focus { border-color: var(--accent); }
+.nutrition-row .calc-result { font-size: 14px; font-weight: 700; color: var(--accent); }
+.radio-group { display: flex; align-items: center; gap: 16px; padding: 4px 0 4px 12px; }
+.radio-group label { font-size: 13px; color: var(--text-primary); font-weight: 500; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.radio-group input[type="radio"] { accent-color: var(--accent); }
+
+/* ── Jiao Qiang Section ── */
+.jq-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--card-border); }
+.jq-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.jq-row label { font-size: 13px; color: var(--text-primary); min-width: 160px; font-weight: 500; }
+.jq-row .limit-value { font-size: 13px; color: var(--accent); font-weight: 700; }
+.jq-row input { width: 130px; height: 34px; padding: 0 10px; border: 1px solid var(--card-border); border-radius: 6px; font-size: 14px; font-family: inherit; outline: none; }
+.jq-row input:focus { border-color: var(--accent); }
+
+/* ── Summary Tab ── */
+.summary-grid {
+  display: grid; gap: 2px 0;
+  grid-template-columns: 120px repeat(4, 1fr);
+}
+.summary-grid .header {
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  padding: 4px 8px 8px; text-align: center;
+}
+.summary-grid .header:first-child { text-align: left; }
+.summary-grid .label { font-size: 14px; color: var(--text-primary); padding: 5px 8px; font-weight: 500; }
+.summary-grid .cell { padding: 3px 4px; display: flex; justify-content: center; }
+.summary-grid input {
+  width: 110px; height: 34px; padding: 0 8px; text-align: center;
+  border: 1px solid var(--card-border); border-radius: 6px;
+  font-size: 13px; font-family: inherit; background: #fff;
+  outline: none; cursor: default;
+}
+
+/* ── Final Calc (Summary Tab 2nd card) ── */
+.final-grid { display: grid; gap: 4px; grid-template-columns: 160px 1fr; align-items: center; }
+.final-grid .flabel { font-size: 14px; color: var(--text-primary); padding: 4px 0; font-weight: 500; }
+.final-grid .flabel.bold { font-weight: 700; }
+.final-grid input {
+  width: 180px; height: 34px; padding: 0 10px;
+  border: 1px solid var(--card-border); border-radius: 6px;
+  font-size: 14px; font-family: inherit; outline: none;
+}
+.final-grid input:focus { border-color: var(--accent); }
+.final-grid input.readonly {
+  background: var(--success-bg); border-color: transparent;
+  cursor: default; font-weight: 500;
+}
+.final-grid input.readonly:focus { border-color: var(--success-bg); }
+.final-grid input.highlight {
+  background: var(--success-bg); border-color: transparent;
+  font-weight: 700; color: var(--accent); cursor: default;
+}
+
+/* ── Other Tab ── */
+.other-grid { display: grid; gap: 4px; grid-template-columns: 160px 1fr; align-items: center; }
+.other-grid .olabel { font-size: 14px; color: var(--text-primary); padding: 5px 0; font-weight: 500; }
+.other-grid .olabel.bold { font-weight: 700; }
+.other-grid input {
+  width: 180px; height: 34px; padding: 0 10px;
+  border: 1px solid var(--card-border); border-radius: 6px;
+  font-size: 14px; font-family: inherit; outline: none;
+}
+.other-grid input:focus { border-color: var(--accent); }
+.other-grid input.readonly {
+  background: var(--success-bg); border-color: transparent;
+  font-weight: 700; color: var(--accent); cursor: default;
+}
+
+/* ── Export Tab ── */
+.export-card {
+  max-width: 460px; margin: 60px auto; text-align: center;
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: var(--radius); padding: 36px 40px;
+}
+.export-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); }
+.export-card .info {
+  font-size: 13px; color: var(--text-secondary); text-align: left;
+  line-height: 1.7; margin-bottom: 20px;
+}
+.export-btn {
+  height: 46px; padding: 0 32px; border: none; border-radius: var(--radius);
+  background: var(--accent); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: background 0.15s;
+}
+.export-btn:hover { background: var(--accent-hover); }
+
+/* ── Recalc Button ── */
+.recalc-btn {
+  height: 42px; padding: 0 32px; border: none; border-radius: var(--radius);
+  background: var(--accent); color: #fff; font-size: 14px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: background 0.15s;
+  display: block; margin: 0 auto 16px auto;
+}
+.recalc-btn:hover { background: var(--accent-hover); }
+
+/* ── History Records ── */
+.history-item {
+  background: var(--surface); border: 1px solid var(--card-border);
+  border-radius: 6px; padding: 12px 16px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 12px;
+}
+.history-item:hover { border-color: var(--accent); }
+.history-info { flex: 1; min-width: 0; }
+.history-info .h-time { font-size: 11px; color: var(--text-secondary); }
+.history-info .h-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.history-info .h-summary { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.history-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.history-actions button {
+  height: 32px; padding: 0 16px; border: none; border-radius: 6px;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: background 0.15s;
+}
+.history-actions .load-btn { background: var(--accent); color: #fff; }
+.history-actions .load-btn:hover { background: var(--accent-hover); }
+.history-actions .del-btn { background: var(--danger); color: #fff; }
+.history-actions .del-btn:hover { background: #c62828; }
+
+/* ── Template Modal ── */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  background: #fff; border-radius: 12px; width: 480px; max-height: 80vh;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2); display: flex; flex-direction: column;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--card-border);
+}
+.modal-header h2 { font-size: 16px; font-weight: 700; margin: 0; }
+.modal-close {
+  width: 32px; height: 32px; border: none; border-radius: 6px;
+  background: transparent; font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+}
+.modal-close:hover { background: var(--surface); }
+.modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.modal-body .section-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; }
+.tpl-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--card-border);
+  border-radius: 6px; margin-bottom: 8px;
+}
+.tpl-item:hover { border-color: var(--accent); }
+.tpl-info { flex: 1; min-width: 0; }
+.tpl-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.tpl-time { font-size: 11px; color: var(--text-secondary); }
+.tpl-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.tpl-actions button {
+  height: 30px; padding: 0 14px; border: none; border-radius: 6px;
+  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.tpl-load { background: var(--accent); color: #fff; }
+.tpl-load:hover { background: var(--accent-hover); }
+.tpl-del { background: var(--danger); color: #fff; }
+.tpl-del:hover { background: #c62828; }
+.tpl-save-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.tpl-save-row input {
+  flex: 1; height: 34px; padding: 0 10px;
+  border: 1px solid var(--card-border); border-radius: 6px;
+  font-size: 14px; font-family: inherit; outline: none;
+}
+.tpl-save-row input:focus { border-color: var(--accent); }
+.tpl-save-row button {
+  height: 34px; padding: 0 20px; border: none; border-radius: 6px;
+  background: var(--accent); color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.tpl-save-row button:hover { background: var(--accent-hover); }
+.tpl-empty {
+  text-align: center; padding: 30px 0; color: var(--text-secondary); font-size: 14px;
+}
+.tpl-preview {
+  font-size: 12px; color: var(--text-secondary); margin-top: 2px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .data-grid { grid-template-columns: 120px 1fr 1fr; }
+  .data-grid input[type="number"] { width: 100px; }
+  .summary-grid { grid-template-columns: 100px repeat(4, 1fr); }
+  .summary-grid input { width: 80px; }
+  main { padding: 12px; }
+  .tab-bar { padding: 0 8px; }
+  .tab-btn { padding: 10px 12px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ Header ══════════ -->
+<header class="app-header">
+  <h1>交通事故赔偿计算器</h1>
+  <div class="spacer"></div>
+  <span style="display:flex;gap:8px;align-items:center;font-size:13px;color:#fff;margin-right:12px;">
+    <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:500;">
+      <input type="radio" name="jqLiability" value="有责" checked onchange="updateJqLimits()"> 有责
+    </label>
+    <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:500;">
+      <input type="radio" name="jqLiability" value="无责" onchange="updateJqLimits()"> 无责
+    </label>
+    <span style="font-size:11px;opacity:0.8;white-space:nowrap;" id="jqTotalLimit">总限额 200,000 元</span>
+  </span>
+  <button onclick="openTemplateModal()" style="height:30px;padding:0 12px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;background:transparent;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:8px;white-space:nowrap;">模板</button>
+  <span id="autoSaveIndicator" style="font-size:11px;color:rgba(255,255,255,0.7);margin-right:12px;white-space:nowrap;"></span>
+  <div class="plaintiff-area">
+    <label>原告</label>
+    <input type="text" id="plaintiffName" placeholder="输入原告姓名" oninput="updatePlaintiff(this.value)">
+  </div>
+</header>
+
+<!-- ══════════ Tab Bar ══════════ -->
+<nav class="tab-bar" id="tabBar">
+  <button class="tab-btn active" data-tab="medical">医疗费类</button>
+  <button class="tab-btn" data-tab="death">死亡伤残类</button>
+  <button class="tab-btn" data-tab="property">财产类</button>
+  <button class="tab-btn" data-tab="summary">汇总计算</button>
+  <button class="tab-btn" data-tab="other">其他费用</button>
+  <button class="tab-btn" data-tab="export">导出Excel</button>
+  <button class="tab-btn" data-tab="history">历史记录</button>
+</nav>
+
+<!-- ══════════ Main Content ══════════ -->
+<main>
+
+<!-- ── Tab 1: 医疗费类 ── -->
+<section id="tab-medical" class="tab-content active">
+  <div class="card">
+    <div class="card-title">医疗费用</div>
+    <div class="data-grid" id="medicalGrid">
+      <div class="header">项目</div>
+      <div class="header">原告要求</div>
+      <div class="header">本院支持</div>
+
+      <!-- 医疗费 -->
+      <div class="label">医疗费</div>
+      <div class="input-cell"><input type="number" id="med_医疗费_claim" data-calc="medical" value="0" step="0.01"></div>
+      <div class="input-cell end-cell"><input type="number" id="med_医疗费_support" class="readonly" value="0" readonly></div>
+
+      <!-- Detail rows -->
+      <div></div>
+      <div class="input-cell" style="grid-column: span 2; justify-content: start; padding-left: 0;">
+        <div class="detail-section" id="medDetailSection">
+          <div class="detail-header">医疗费逐笔明细</div>
+          <div id="medDetailRows"></div>
+          <div class="detail-total" id="medDetailTotal">逐笔合计: 0.00 元</div>
+          <button class="add-btn" onclick="addMedDetailRow()">+ 添加一行</button>
+        </div>
+      </div>
+
+      <!-- 住院伙食补助费 -->
+      <div class="label">住院伙食补助费</div>
+      <div class="input-cell"><input type="number" id="med_住院伙食补助费_claim" data-calc="medical" value="0" step="0.01"></div>
+      <div id="hospitalFoodSupportCell" class="input-cell end-cell"><input type="number" id="med_住院伙食补助费_support" value="0" step="0.01" readonly oninput="scheduleCalc()"></div>
+
+      <!-- 住院伙食补助费 天数/方式 -->
+      <div></div>
+      <div style="grid-column: span 2; justify-content: start; padding: 2px 4px;">
+        <div class="nutrition-row" id="hospitalFoodDaysRow">
+          <label>天数:</label>
+          <input type="number" id="hospitalFoodDays" value="0" min="0" oninput="updateHospitalFood()">
+          <span style="font-size:13px;color:var(--text-secondary);">×</span>
+          <input type="number" id="hospitalFoodRate" value="100" min="0" oninput="updateHospitalFood()" style="width:60px;height:26px;text-align:center;border:1px solid var(--card-border);border-radius:4px;font-size:13px;font-family:inherit;outline:none;">
+          <span style="font-size:13px;color:var(--text-secondary);">元/天</span>
+          <span class="calc-result" id="hospitalFoodCalcResult">= 0.00 元</span>
+        </div>
+        <div class="radio-group">
+          <label>方式:</label>
+          <label><input type="radio" name="hospitalFoodMode" value="days" checked onchange="updateHospitalFood()"> 按天数计算</label>
+          <label><input type="radio" name="hospitalFoodMode" value="manual" onchange="updateHospitalFood()"> 直接输入金额</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">营养费</div>
+    <div class="data-grid" style="grid-template-columns: 140px 1fr 1fr;">
+      <div class="label">营养费</div>
+      <div class="input-cell"><input type="number" id="med_营养费_claim" data-calc="medical" value="0" step="0.01"></div>
+      <div class="input-cell end-cell"><input type="number" id="med_营养费_support" class="readonly" value="0" readonly></div>
+    </div>
+    <div class="nutrition-row">
+      <label>天数:</label>
+      <input type="number" id="nutritionDays" value="0" min="0" oninput="updateNutrition()">
+      <span style="font-size:13px;color:var(--text-secondary);">×</span>
+      <input type="number" id="nutritionRate" value="50" min="0" oninput="updateNutrition()" style="width:60px;height:26px;text-align:center;border:1px solid var(--card-border);border-radius:4px;font-size:13px;font-family:inherit;outline:none;">
+      <span style="font-size:13px;color:var(--text-secondary);">元/天</span>
+      <span class="calc-result" id="nutritionCalcResult">= 0.00 元</span>
+    </div>
+    <div class="radio-group">
+      <label>依据:</label>
+      <label><input type="radio" name="nutritionBasis" value="医嘱/鉴定" checked onchange="updateNutrition()"> 按医嘱/鉴定确定营养期</label>
+      <label><input type="radio" name="nutritionBasis" value="三期鉴定" onchange="updateNutrition()"> 按三期鉴定确定营养期</label>
+    </div>
+  </div>
+
+  <!-- 小计 + 交强险 -->
+  <div class="card" style="background:var(--surface);">
+    <div class="data-grid" style="grid-template-columns: 140px 1fr 1fr;">
+      <div class="label" style="font-weight:700;color:var(--accent);">小计</div>
+      <div class="input-cell"><input type="number" id="medSubtotalClaim" class="readonly" value="0.00" readonly></div>
+      <div class="input-cell end-cell"><input type="number" id="medSubtotalSupport" class="readonly" value="0.00" readonly></div>
+    </div>
+    <div class="jq-section">
+      <div class="jq-row"><label>交强险医疗费限额:</label><span class="limit-value" id="medJqLimit">18,000 元</span></div>
+      <div class="jq-row"><label>交强险扣除金额:</label><input type="number" id="jqMedical" value="0" step="0.01" oninput="scheduleCalc()"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Tab 2: 死亡伤残类 ── -->
+<section id="tab-death" class="tab-content">
+  <div class="card">
+    <div class="card-title">死亡伤残赔偿项目</div>
+    <div class="data-grid" id="deathGrid">
+      <div class="header">项目</div>
+      <div class="header">原告要求</div>
+      <div class="header">本院支持</div>
+    </div>
+  </div>
+  <div class="card" style="background:var(--surface);">
+    <div class="data-grid" style="grid-template-columns: 140px 1fr 1fr;">
+      <div class="label" style="font-weight:700;color:var(--accent);">小计</div>
+      <div class="input-cell"><input type="number" id="deathSubtotalClaim" class="readonly" value="0.00" readonly></div>
+      <div class="input-cell end-cell"><input type="number" id="deathSubtotalSupport" class="readonly" value="0.00" readonly></div>
+    </div>
+    <div class="jq-section">
+      <div class="jq-row"><label>交强险死亡伤残限额:</label><span class="limit-value" id="deathJqLimit">180,000 元</span></div>
+      <div class="jq-row"><label>交强险扣除金额:</label><input type="number" id="jqDeath" value="0" step="0.01" oninput="scheduleCalc()"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Tab 3: 财产类 ── -->
+<section id="tab-property" class="tab-content">
+  <div class="card">
+    <div class="card-title">财产损失项目</div>
+    <div class="data-grid">
+      <div class="header">项目</div>
+      <div class="header">原告要求</div>
+      <div class="header">本院支持</div>
+      <div class="label">财产损失</div>
+      <div class="input-cell"><input type="number" id="prop_财产损失_claim" data-calc="property" value="0" step="0.01"></div>
+      <div class="input-cell end-cell"><input type="number" id="prop_财产损失_support" data-calc="property" value="0" step="0.01"></div>
+    </div>
+  </div>
+  <div class="card" style="background:var(--surface);">
+    <div class="data-grid" style="grid-template-columns: 140px 1fr 1fr;">
+      <div class="label" style="font-weight:700;color:var(--accent);">小计</div>
+      <div class="input-cell"><input type="number" id="propSubtotalClaim" class="readonly" value="0.00" readonly></div>
+      <div class="input-cell end-cell"><input type="number" id="propSubtotalSupport" class="readonly" value="0.00" readonly></div>
+    </div>
+    <div class="jq-section">
+      <div class="jq-row"><label>交强险财产损失限额:</label><span class="limit-value" id="propJqLimit">2,000 元</span></div>
+      <div class="jq-row"><label>交强险扣除金额:</label><input type="number" id="jqProperty" value="0" step="0.01" oninput="scheduleCalc()"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Tab 4: 汇总计算 ── -->
+<section id="tab-summary" class="tab-content">
+  <div class="card">
+    <div class="card-title">三大类赔偿汇总</div>
+    <div class="summary-grid">
+      <div class="header">类别</div>
+      <div class="header">原告要求合计</div>
+      <div class="header">本院支持合计</div>
+      <div class="header">交强险扣除</div>
+      <div class="header">扣除后余额</div>
+
+      <div class="label">医疗费类</div>
+      <div class="cell"><input id="sumMedClaim" value="0.00" readonly></div>
+      <div class="cell"><input id="sumMedSupport" value="0.00" readonly></div>
+      <div class="cell"><input id="sumMedJq" value="0.00" readonly></div>
+      <div class="cell"><input id="sumMedAfter" value="0.00" readonly></div>
+
+      <div class="label">死亡伤残类</div>
+      <div class="cell"><input id="sumDeathClaim" value="0.00" readonly></div>
+      <div class="cell"><input id="sumDeathSupport" value="0.00" readonly></div>
+      <div class="cell"><input id="sumDeathJq" value="0.00" readonly></div>
+      <div class="cell"><input id="sumDeathAfter" value="0.00" readonly></div>
+
+      <div class="label">财产类</div>
+      <div class="cell"><input id="sumPropClaim" value="0.00" readonly></div>
+      <div class="cell"><input id="sumPropSupport" value="0.00" readonly></div>
+      <div class="cell"><input id="sumPropJq" value="0.00" readonly></div>
+      <div class="cell"><input id="sumPropAfter" value="0.00" readonly></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">最终计算</div>
+    <div class="final-grid">
+      <div class="flabel">法院支持合计:</div>
+      <div><input id="finalTotalSupport" class="readonly" value="0.00" readonly></div>
+
+      <div class="flabel">损失不分责:</div>
+      <div><input id="finalLossNoResp" type="number" value="0" step="0.01" oninput="scheduleCalc()"></div>
+
+      <div class="flabel">扣除交强险后余额:</div>
+      <div><input id="finalAfterJq" class="readonly" value="0.00" readonly></div>
+
+      <div class="flabel">被告承担比例 (%):</div>
+      <div><input id="finalRatio" type="number" value="100" min="0" max="100" step="1" oninput="scheduleCalc()"></div>
+
+      <div class="flabel bold">被告应赔偿:</div>
+      <div><input id="finalDefendantPay" class="highlight" value="0.00" readonly></div>
+
+      <div class="flabel">被告垫付:</div>
+      <div><input id="finalAdvance" type="number" value="0" step="0.01" oninput="scheduleCalc()"></div>
+
+      <div class="flabel bold">实际支付原告:</div>
+      <div><input id="finalActualPay" class="highlight" value="0.00" readonly></div>
+    </div>
+  </div>
+
+  <button class="recalc-btn" onclick="autoCalc()">重新计算</button>
+</section>
+
+<!-- ── Tab 5: 其他费用 ── -->
+<section id="tab-other" class="tab-content">
+  <div class="card">
+    <div class="card-title">诉讼相关费用</div>
+    <div class="other-grid">
+      <div class="olabel">鉴定费:</div>
+      <div><input type="number" id="otherAppraisal" value="0" step="0.01" oninput="scheduleCalc()"></div>
+
+      <div style="grid-column:1/-1;height:1px;background:var(--card-border);margin:4px 0;"></div>
+      <div class="olabel bold" style="grid-column:1/-1;font-size:14px;color:var(--accent);padding:2px 0;">诉讼费自动计算（财产案件分段累计）</div>
+
+      <div class="olabel">原告诉请总额:</div>
+      <div><input id="otherTotalClaimDisplay" class="readonly" value="0.00" readonly></div>
+
+      <div class="olabel">法院支持总额:</div>
+      <div><input id="otherTotalSupportDisplay" class="readonly" value="0.00" readonly></div>
+
+      <div class="olabel">诉讼费:</div>
+      <div><input id="otherLitigationFee" class="readonly" value="0.00" readonly style="font-weight:700;color:var(--accent);"> <span id="otherFeeBreakdown" style="font-size:12px;color:var(--text-secondary);"></span></div>
+
+      <div class="olabel">被告负担:</div>
+      <div><input id="otherDefendantFee" class="readonly" value="0.00" readonly style="width:150px;"> <span id="otherDefendantPct" style="font-size:12px;color:var(--text-secondary);">(0.00%)</span></div>
+
+      <div class="olabel">原告负担:</div>
+      <div><input id="otherPlaintiffFee" class="readonly" value="0.00" readonly style="width:150px;"> <span id="otherPlaintiffPct" style="font-size:12px;color:var(--text-secondary);">(0.00%)</span></div>
+
+      <div style="grid-column:1/-1;height:1px;background:var(--card-border);margin:4px 0;"></div>
+
+      <div class="olabel">原告三者险应得:</div>
+      <div><input type="number" id="otherThirdParty" value="0" step="0.01" oninput="scheduleCalc()"></div>
+
+      <div class="olabel bold">原告诉请合计:</div>
+      <div><input id="otherTotalClaim" class="readonly" value="0.00" readonly></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Tab 6: 导出 ── -->
+<section id="tab-export" class="tab-content">
+  <div class="export-card">
+    <h2>导出 Excel</h2>
+    <div class="info">
+      将当前所有输入数据按模板格式导出为 Excel 文件。<br><br>
+      导出的文件包含：<br>
+      · 赔偿汇总 — 三大类赔偿汇总表<br>
+      · 医疗费类明细 — 医疗费用详细清单<br>
+      · 死亡伤残类明细 — 死亡伤残费用清单<br>
+      · 财产类明细 — 财产损失清单
+    </div>
+    <button class="export-btn" onclick="exportExcel()" style="margin-bottom: 12px;">选择路径并导出 Excel</button>
+    <button class="export-btn" onclick="saveHistory()" style="background:#34a853;">保存当前记录</button>
+  </div>
+</section>
+
+<!-- ── Tab 7: 历史记录 ── -->
+<section id="tab-history" class="tab-content">
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>历史记录</span>
+      <button class="add-btn" onclick="saveHistory()" style="margin:0;font-size:13px;">+ 保存当前记录</button>
+    </div>
+    <div id="historyList">
+      <div style="text-align:center;padding:40px 0;color:var(--text-secondary);font-size:14px;">
+        暂无历史记录，导出 Excel 或点击"保存当前记录"将自动保存。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ Template Modal ══════════ -->
+<div id="templateModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeTemplateModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>标准模板管理</h2>
+      <button class="modal-close" onclick="closeTemplateModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-title">已保存的模板</div>
+      <div id="templateList"></div>
+      <div style="border-top:1px solid var(--card-border);margin-top:8px;padding-top:12px;">
+        <div class="section-title">保存当前为标准模板</div>
+        <div class="tpl-save-row">
+          <input type="text" id="templateNameInput" placeholder="输入模板名称，如"广东省标准"">
+          <button onclick="saveCurrentTemplate()">保存模板</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════
+// 数据模型 & 初始化
+// ═══════════════════════════════════════════════
+
+const MEDICAL_ITEMS = ['医疗费', '住院伙食补助费', '营养费'];
+const DEATH_ITEMS = ['护理费', '误工费', '残疾赔偿金', '被扶养人生活费', '精神损害抚慰金', '护理用品费'];
+const PROPERTY_ITEMS = ['财产损失'];
+const DEATH_LABELS = ['护理费', '误工费', '残疾赔偿金', '被扶养人生活费', '精神损害抚慰金', '护理用品费'];
+
+const MED_DETAIL_KEY = '医疗费';
+
+// 交强险分项限额（有责 / 无责）
+const JQ_LIMITS_ALL = {
+  有责: { medical: 18000, death: 180000, property: 2000, total: 200000 },
+  无责: { medical: 1800, death: 18000, property: 100, total: 19900 }
+};
+function getJqLimits() {
+  const el = document.querySelector('input[name="jqLiability"]:checked');
+  const mode = el ? el.value : '有责';
+  return JQ_LIMITS_ALL[mode] || JQ_LIMITS_ALL['有责'];
+}
+
+function updateJqLimits() {
+  const limits = getJqLimits();
+  const medStr = limits.medical.toLocaleString('zh-CN');
+  const deathStr = limits.death.toLocaleString('zh-CN');
+  const propStr = limits.property.toLocaleString('zh-CN');
+  const totalStr = limits.total.toLocaleString('zh-CN');
+  const el = document.querySelector('input[name="jqLiability"]:checked');
+  const modeLabel = el ? el.value : '有责';
+
+  g('medJqLimit').textContent = medStr + ' 元';
+  g('deathJqLimit').textContent = deathStr + ' 元';
+  g('propJqLimit').textContent = propStr + ' 元';
+  const totalEl = g('jqTotalLimit');
+  if (totalEl) totalEl.textContent = modeLabel + ' 总限额 ' + totalStr + ' 元';
+}
+
+let calcTimer = null;
+let medDetailRows = [];
+
+function fmt(n) { return n.toFixed(2); }
+
+function g(id) { return document.getElementById(id); }
+
+function val(id) {
+  const el = g(id);
+  if (!el) return 0;
+  const v = parseFloat(el.value);
+  return isNaN(v) ? 0 : v;
+}
+
+function setv(id, v) {
+  const el = g(id);
+  if (el) el.value = typeof v === 'number' ? fmt(v) : v;
+}
+
+// ── Plaintiff ──
+let plaintiffName = '';
+function updatePlaintiff(v) { plaintiffName = v.trim(); scheduleSessionSave(); }
+
+// ── Tab Switching ──
+document.getElementById('tabBar').addEventListener('click', function(e) {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  const tab = btn.dataset.tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+});
+
+// ── Build Death Items ──
+(function buildDeathTab() {
+  const grid = document.getElementById('deathGrid');
+
+  // Regular items (all except 交通费 which is handled separately)
+  const regularItems = ['护理费', '误工费', '残疾赔偿金', '被扶养人生活费', '精神损害抚慰金', '护理用品费'];
+
+  regularItems.forEach((item) => {
+    const div = document.createElement('div');
+    div.className = 'label';
+    div.textContent = item;
+    grid.appendChild(div);
+
+    const c1 = document.createElement('div');
+    c1.className = 'input-cell';
+    const inp1 = document.createElement('input');
+    inp1.type = 'number';
+    inp1.id = 'death_' + item + '_claim';
+    inp1.dataset.calc = 'death';
+    inp1.value = '0';
+    inp1.step = '0.01';
+    c1.appendChild(inp1);
+    grid.appendChild(c1);
+
+    const c2 = document.createElement('div');
+    c2.className = 'input-cell end-cell';
+    const inp2 = document.createElement('input');
+    inp2.type = 'number';
+    inp2.id = 'death_' + item + '_support';
+    inp2.dataset.calc = 'death';
+    inp2.value = '0';
+    inp2.step = '0.01';
+    c2.appendChild(inp2);
+    grid.appendChild(c2);
+
+    // 误工费: dual-mode wage calculator
+    if (item === '误工费') {
+      const emptyDiv = document.createElement('div');
+      grid.appendChild(emptyDiv);
+      const wsDiv = document.createElement('div');
+      wsDiv.style.cssText = 'grid-column: 2 / -1; padding: 2px 4px 8px;';
+      wsDiv.innerHTML =
+        '<div class="radio-group" style="padding-left:0;">' +
+          '<label>计算方式:</label>' +
+          '<label><input type="radio" name="wageCalcMode" value="discretion" checked onchange="updateWageCalcMode()"> 酌定 (5000元/月)</label>' +
+          '<label><input type="radio" name="wageCalcMode" value="actual" onchange="updateWageCalcMode()"> 按实际工资计算</label>' +
+        '</div>' +
+        '<div class="nutrition-row" style="padding-left:0;">' +
+          '<label>误工期:</label>' +
+          '<input type="number" id="wageDays" value="0" min="0" oninput="updateWageCalcDisplay()" style="width:80px;">' +
+          '<span style="font-size:13px;color:var(--text-secondary);">天</span>' +
+        '</div>' +
+        '<div id="wageDiscretionSection">' +
+          '<div style="font-size:13px;color:var(--text-secondary);padding:2px 0;">' +
+            '<input type="number" id="wageMonthlyRate" value="5000" min="0" oninput="updateWageDiscretion()" style="width:80px;height:26px;text-align:center;border:1px solid var(--card-border);border-radius:4px;font-size:13px;font-family:inherit;outline:none;">元/月 \u00f7 30日 \u00d7 <span id="wageDaysDisp">0</span>日 = <strong id="wageDiscResult">0.00</strong> 元' +
+          '</div>' +
+        '</div>' +
+        '<div id="wageActualSection" style="display:none;">' +
+          '<div class="detail-section" style="margin-left:0;">' +
+            '<div class="detail-header">工资逐笔记录</div>' +
+            '<div id="wageDetailRows"></div>' +
+            '<div class="detail-total" id="wageDetailTotal">合计: 0.00 元</div>' +
+            '<button class="add-btn" onclick="addWageDetailRow()">+ 添加一行</button>' +
+          '</div>' +
+          '<div class="nutrition-row" style="padding-left:0;margin-top:4px;">' +
+            '<label>对应工作天数合计:</label>' +
+            '<input type="number" id="wageTotalDays" value="0" min="0" oninput="updateWageActual()" style="width:80px;">' +
+            '<span style="font-size:13px;color:var(--text-secondary);">天</span>' +
+          '</div>' +
+          '<div style="font-size:13px;color:var(--text-secondary);padding:2px 0;">' +
+            '总工资 <span id="wageTotalAmtDisp">0.00</span>元 \u00f7 <span id="wageTotalDaysDisp">0</span>日 = 日平均 <span id="wageAvgDailyDisp">0.00</span>元/日 \u00d7 <span id="wageActualDaysDisp">0</span>日 = <strong id="wageActualResultDisp">0.00</strong> 元' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;padding:4px 0;">' +
+          '<button class="add-btn" onclick="fillWageSupport()" style="margin:0;">填入本院支持</button>' +
+          '<span style="font-size:12px;color:var(--text-secondary);">点击将计算结果填入本院支持栏</span>' +
+        '</div>' +
+        '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:2px;margin-top:2px;">误工费计算备注:</div>' +
+        '<textarea id="death_\u8bef\u5de5\u8d39_note" placeholder="输入误工费计算说明（将显示在Excel导出中）..." oninput="scheduleSessionSave()" style="width:100%;height:50px;padding:6px 8px;border:1px solid var(--card-border);border-radius:4px;font-size:13px;font-family:inherit;resize:vertical;outline:none;"></textarea>';
+      grid.appendChild(wsDiv);
+    }
+  });
+
+  // ── 交通费: custom row with detail section ──
+  // Label
+  const lbl = document.createElement('div');
+  lbl.className = 'label';
+  lbl.textContent = '交通费';
+  grid.appendChild(lbl);
+
+  // Claim
+  const cc = document.createElement('div');
+  cc.className = 'input-cell';
+  const ci = document.createElement('input');
+  ci.type = 'number';
+  ci.id = 'death_交通费_claim';
+  ci.dataset.calc = 'death';
+  ci.value = '0';
+  ci.step = '0.01';
+  cc.appendChild(ci);
+  grid.appendChild(cc);
+
+  // Support (readonly, summed from detail rows)
+  const sc = document.createElement('div');
+  sc.className = 'input-cell end-cell';
+  const si = document.createElement('input');
+  si.type = 'number';
+  si.id = 'death_交通费_support';
+  si.className = 'readonly';
+  si.value = '0';
+  si.readOnly = true;
+  sc.appendChild(si);
+  grid.appendChild(sc);
+
+  // Detail section row (spans full width below 交通费)
+  const emptySpan = document.createElement('div');
+  grid.appendChild(emptySpan);
+
+  const detailCell = document.createElement('div');
+  detailCell.style.cssText = 'grid-column: span 2; justify-content: start; padding-left: 0;';
+  detailCell.innerHTML =
+    '<div class="detail-section" style="margin-left:0;">' +
+      '<div class="detail-header">交通费逐笔明细</div>' +
+      '<div id="trafficDetailRows"></div>' +
+      '<div class="detail-total" id="trafficDetailTotal">逐笔合计: 0.00 元</div>' +
+      '<button class="add-btn" onclick="addTrafficDetailRow()">+ 添加一行</button>' +
+    '</div>';
+  grid.appendChild(detailCell);
+})();
+
+// ── Calc Event Binding ──
+document.querySelectorAll('[data-calc]').forEach(el => {
+  el.addEventListener('input', scheduleCalc);
+});
+
+// ── Medical Detail Rows ──
+function addMedDetailRow(date, amount) {
+  const container = document.getElementById('medDetailRows');
+  const row = document.createElement('div');
+  row.className = 'detail-row';
+
+  const dInput = document.createElement('input');
+  dInput.type = 'text';
+  dInput.placeholder = '日期（选填）';
+  dInput.value = date || '';
+  row.appendChild(dInput);
+
+  const aInput = document.createElement('input');
+  aInput.type = 'number';
+  aInput.placeholder = '金额（元）';
+  aInput.value = amount || '';
+  aInput.step = '0.01';
+  aInput.oninput = updateMedDetailTotal;
+  row.appendChild(aInput);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'del-btn';
+  delBtn.textContent = '\u00d7';
+  delBtn.onclick = function() { row.remove(); updateMedDetailTotal(); };
+  row.appendChild(delBtn);
+
+  container.appendChild(row);
+  updateMedDetailTotal();
+}
+
+function updateMedDetailTotal() {
+  const rows = document.querySelectorAll('#medDetailRows .detail-row');
+  let total = 0;
+  rows.forEach(row => {
+    const inp = row.querySelector('input[type="number"]');
+    if (inp) {
+      const v = parseFloat(inp.value);
+      if (!isNaN(v)) total += v;
+    }
+  });
+  document.getElementById('medDetailTotal').textContent = '逐笔合计: ' + fmt(total) + ' 元';
+  // Sync to 医疗费 support
+  const supportEl = document.getElementById('med_' + MED_DETAIL_KEY + '_support');
+  if (supportEl) {
+    supportEl.value = fmt(total);
+    scheduleCalc();
+  }
+}
+
+// ── Traffic Detail Rows ──
+function addTrafficDetailRow(date, amount) {
+  const container = document.getElementById('trafficDetailRows');
+  const row = document.createElement('div');
+  row.className = 'detail-row';
+
+  const dInput = document.createElement('input');
+  dInput.type = 'text';
+  dInput.placeholder = '日期（选填）';
+  dInput.value = date || '';
+  row.appendChild(dInput);
+
+  const aInput = document.createElement('input');
+  aInput.type = 'number';
+  aInput.placeholder = '金额（元）';
+  aInput.value = amount || '';
+  aInput.step = '0.01';
+  aInput.oninput = updateTrafficDetailTotal;
+  row.appendChild(aInput);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'del-btn';
+  delBtn.textContent = '\u00d7';
+  delBtn.onclick = function() { row.remove(); updateTrafficDetailTotal(); };
+  row.appendChild(delBtn);
+
+  container.appendChild(row);
+  updateTrafficDetailTotal();
+}
+
+function updateTrafficDetailTotal() {
+  const rows = document.querySelectorAll('#trafficDetailRows .detail-row');
+  let total = 0;
+  rows.forEach(row => {
+    const inp = row.querySelector('input[type="number"]');
+    if (inp) {
+      const v = parseFloat(inp.value);
+      if (!isNaN(v)) total += v;
+    }
+  });
+  document.getElementById('trafficDetailTotal').textContent = '逐笔合计: ' + fmt(total) + ' 元';
+  const supportEl = document.getElementById('death_交通费_support');
+  if (supportEl) {
+    supportEl.value = fmt(total);
+    scheduleCalc();
+  }
+}
+
+// ── Wage Calculator (误工费) ──
+function updateWageCalcMode() {
+  const isActual = document.querySelector('input[name="wageCalcMode"]:checked')?.value === 'actual';
+  const disc = document.getElementById('wageDiscretionSection');
+  const act = document.getElementById('wageActualSection');
+  if (disc) disc.style.display = isActual ? 'none' : '';
+  if (act) act.style.display = isActual ? '' : 'none';
+  updateWageCalcDisplay();
+}
+
+function updateWageCalcDisplay() {
+  const isActual = document.querySelector('input[name="wageCalcMode"]:checked')?.value === 'actual';
+  if (isActual) updateWageActual();
+  else updateWageDiscretion();
+}
+
+function updateWageDiscretion() {
+  const days = val('wageDays');
+  const rate = val('wageMonthlyRate') || 5000;
+  const dDisp = document.getElementById('wageDaysDisp');
+  if (dDisp) dDisp.textContent = days;
+  const rEl = document.getElementById('wageDiscResult');
+  if (rEl) rEl.textContent = fmt(rate / 30 * days);
+}
+
+function updateWageActual() {
+  const rows = document.querySelectorAll('#wageDetailRows .detail-row');
+  let total = 0;
+  rows.forEach(row => {
+    const inp = row.querySelectorAll('input')[1];
+    if (inp) {
+      const v = parseFloat(inp.value);
+      if (!isNaN(v)) total += v;
+    }
+  });
+  const totalEl = document.getElementById('wageDetailTotal');
+  if (totalEl) totalEl.textContent = '合计: ' + fmt(total) + ' 元';
+
+  const days = val('wageDays');
+  const totalDays = val('wageTotalDays');
+
+  const taDisp = document.getElementById('wageTotalAmtDisp');
+  if (taDisp) taDisp.textContent = fmt(total);
+  const tdDisp = document.getElementById('wageTotalDaysDisp');
+  if (tdDisp) tdDisp.textContent = totalDays;
+  const adDisp = document.getElementById('wageActualDaysDisp');
+  if (adDisp) adDisp.textContent = days;
+
+  let avgDaily = 0;
+  if (totalDays > 0) avgDaily = total / totalDays;
+  const avgDisp = document.getElementById('wageAvgDailyDisp');
+  if (avgDisp) avgDisp.textContent = fmt(avgDaily);
+
+  const result = avgDaily * days;
+  const rDisp = document.getElementById('wageActualResultDisp');
+  if (rDisp) rDisp.textContent = fmt(result);
+}
+
+function addWageDetailRow(period, amount) {
+  const container = document.getElementById('wageDetailRows');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'detail-row';
+
+  const pInput = document.createElement('input');
+  pInput.type = 'text';
+  pInput.placeholder = '时间段（如1月-6月）';
+  pInput.value = period || '';
+  row.appendChild(pInput);
+
+  const aInput = document.createElement('input');
+  aInput.type = 'number';
+  aInput.placeholder = '金额（元）';
+  aInput.value = amount || '';
+  aInput.step = '0.01';
+  aInput.oninput = function() { updateWageActual(); scheduleSessionSave(); };
+  row.appendChild(aInput);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'del-btn';
+  delBtn.textContent = '\u00d7';
+  delBtn.onclick = function() { row.remove(); updateWageActual(); };
+  row.appendChild(delBtn);
+
+  container.appendChild(row);
+  updateWageActual();
+}
+
+function fillWageSupport() {
+  const mode = document.querySelector('input[name="wageCalcMode"]:checked');
+  let result = 0;
+  if (mode && mode.value === 'actual') {
+    const rEl = document.getElementById('wageActualResultDisp');
+    if (rEl) result = parseFloat(rEl.textContent) || 0;
+  } else {
+    const rEl = document.getElementById('wageDiscResult');
+    if (rEl) result = parseFloat(rEl.textContent) || 0;
+  }
+  const supportEl = document.getElementById('death_误工费_support');
+  if (supportEl) {
+    supportEl.value = fmt(result);
+    scheduleCalc();
+  }
+}
+
+// ── Nutrition ──
+function updateNutrition() {
+  const days = val('nutritionDays');
+  const rate = val('nutritionRate') || 50;
+  const total = days * rate;
+  document.getElementById('nutritionCalcResult').textContent = '= ' + fmt(total) + ' 元';
+  document.getElementById('med_营养费_support').value = fmt(total);
+  scheduleCalc();
+}
+
+// ── 住院伙食补助费 ──
+function updateHospitalFood() {
+  const mode = document.querySelector('input[name="hospitalFoodMode"]:checked');
+  const supportEl = g('med_住院伙食补助费_support');
+  const supportCell = g('hospitalFoodSupportCell');
+  const daysRow = g('hospitalFoodDaysRow');
+  if (mode && mode.value === 'days') {
+    if (daysRow) daysRow.style.display = '';
+    if (supportCell) supportCell.style.display = 'none';
+    const days = val('hospitalFoodDays');
+    const rate = val('hospitalFoodRate') || 100;
+    const total = days * rate;
+    g('hospitalFoodCalcResult').textContent = '= ' + fmt(total) + ' 元';
+    supportEl.value = fmt(total);
+  } else {
+    if (daysRow) daysRow.style.display = 'none';
+    if (supportCell) supportCell.style.display = '';
+    supportEl.readOnly = false;
+  }
+  scheduleCalc();
+}
+
+// ── Debounced Calc ──
+function scheduleCalc() {
+  if (calcTimer) clearTimeout(calcTimer);
+  calcTimer = setTimeout(autoCalc, 200);
+  scheduleSessionSave();
+}
+
+// ═══════════════════════════════════════════════
+// 计算逻辑
+// ═══════════════════════════════════════════════
+
+// 诉讼费分段累计计算（财产案件）
+function calcLitigationFee(amount) {
+  if (amount <= 0) return 0;
+  if (amount <= 10000) return 50;
+
+  let fee = 50; // 不超过1万元部分
+  const tiers = [
+    { min: 10000, max: 100000, rate: 0.025 },
+    { min: 100000, max: 200000, rate: 0.02 },
+    { min: 200000, max: 500000, rate: 0.015 },
+    { min: 500000, max: 1000000, rate: 0.01 },
+    { min: 1000000, max: 2000000, rate: 0.009 },
+    { min: 2000000, max: 5000000, rate: 0.008 },
+    { min: 5000000, max: 10000000, rate: 0.007 },
+    { min: 10000000, max: 20000000, rate: 0.006 },
+    { min: 20000000, max: Infinity, rate: 0.005 },
+  ];
+  for (const tier of tiers) {
+    if (amount > tier.min) {
+      const taxable = Math.min(amount, tier.max) - tier.min;
+      fee += taxable * tier.rate;
+    }
+  }
+  return fee;
+}
+
+function autoCalc() {
+  // 1. Collect medical values
+  const medVals = {};
+  MEDICAL_ITEMS.forEach(item => {
+    medVals[item] = {
+      claim: val('med_' + item + '_claim'),
+      support: val('med_' + item + '_support')
+    };
+  });
+
+  // 2. Collect death values
+  const deathVals = {};
+  DEATH_ITEMS.forEach(item => {
+    deathVals[item] = {
+      claim: val('death_' + item + '_claim'),
+      support: val('death_' + item + '_support')
+    };
+  });
+  // 交通费 (handled separately with detail rows)
+  deathVals['交通费'] = {
+    claim: val('death_交通费_claim'),
+    support: val('death_交通费_support')
+  };
+
+  // 3. Collect property values
+  const propVals = {};
+  PROPERTY_ITEMS.forEach(item => {
+    propVals[item] = {
+      claim: val('prop_' + item + '_claim'),
+      support: val('prop_' + item + '_support')
+    };
+  });
+
+  // 4. Category subtotals
+  const medClaim = MEDICAL_ITEMS.reduce((s, i) => s + medVals[i].claim, 0);
+  const medSupport = MEDICAL_ITEMS.reduce((s, i) => s + medVals[i].support, 0);
+  const deathClaim = DEATH_ITEMS.reduce((s, i) => s + deathVals[i].claim, 0) + deathVals['交通费'].claim;
+  const deathSupport = DEATH_ITEMS.reduce((s, i) => s + deathVals[i].support, 0) + deathVals['交通费'].support;
+  const propClaim = PROPERTY_ITEMS.reduce((s, i) => s + propVals[i].claim, 0);
+  const propSupport = PROPERTY_ITEMS.reduce((s, i) => s + propVals[i].support, 0);
+
+  // 5. Update subtotal displays
+  setv('medSubtotalClaim', medClaim);
+  setv('medSubtotalSupport', medSupport);
+  setv('deathSubtotalClaim', deathClaim);
+  setv('deathSubtotalSupport', deathSupport);
+  setv('propSubtotalClaim', propClaim);
+  setv('propSubtotalSupport', propSupport);
+
+  // 6. Jiao qiang deducts
+  const jqMed = val('jqMedical');
+  const jqDeath = val('jqDeath');
+  const jqProp = val('jqProperty');
+
+  const afterMed = Math.max(0, medSupport - jqMed);
+  const afterDeath = Math.max(0, deathSupport - jqDeath);
+  const afterProp = Math.max(0, propSupport - jqProp);
+
+  // 7. Summary tab
+  setv('sumMedClaim', medClaim);
+  setv('sumMedSupport', medSupport);
+  setv('sumMedJq', jqMed);
+  setv('sumMedAfter', afterMed);
+
+  setv('sumDeathClaim', deathClaim);
+  setv('sumDeathSupport', deathSupport);
+  setv('sumDeathJq', jqDeath);
+  setv('sumDeathAfter', afterDeath);
+
+  setv('sumPropClaim', propClaim);
+  setv('sumPropSupport', propSupport);
+  setv('sumPropJq', jqProp);
+  setv('sumPropAfter', afterProp);
+
+  // 8. Final calculation
+  const totalSupport = medSupport + deathSupport + propSupport;
+  const afterJqTotal = afterMed + afterDeath + afterProp;
+
+  const lossNoResp = val('finalLossNoResp');
+  const ratio = val('finalRatio') / 100;
+  const advance = val('finalAdvance');
+
+  const defendantPay = (afterJqTotal + lossNoResp) * ratio;
+  const actualPay = Math.max(0, defendantPay - advance);
+
+  const totalClaim = medClaim + deathClaim + propClaim;
+
+  setv('finalTotalSupport', totalSupport);
+  setv('finalAfterJq', afterJqTotal);
+  setv('finalDefendantPay', defendantPay);
+  setv('finalActualPay', actualPay);
+
+  // 9. Other tab - litigation fee calc
+  setv('otherTotalClaim', totalClaim);
+  setv('otherTotalClaimDisplay', totalClaim);
+  setv('otherTotalSupportDisplay', totalSupport);
+
+  const litFee = calcLitigationFee(totalClaim);
+  setv('otherLitigationFee', litFee);
+
+  // Fee breakdown text
+  let breakdownText = '';
+  if (totalClaim > 10000) {
+    const parts = [];
+    parts.push('≤1万:50元');
+    const tierLabels = [
+      { min: 10000, max: 100000, label: '1~10万', rate: '2.5%' },
+      { min: 100000, max: 200000, label: '10~20万', rate: '2%' },
+      { min: 200000, max: 500000, label: '20~50万', rate: '1.5%' },
+      { min: 500000, max: 1000000, label: '50~100万', rate: '1%' },
+      { min: 1000000, max: 2000000, label: '100~200万', rate: '0.9%' },
+      { min: 2000000, max: 5000000, label: '200~500万', rate: '0.8%' },
+      { min: 5000000, max: 10000000, label: '500~1000万', rate: '0.7%' },
+      { min: 10000000, max: 20000000, label: '1000~2000万', rate: '0.6%' },
+      { min: 20000000, max: Infinity, label: '>2000万', rate: '0.5%' },
+    ];
+    for (const t of tierLabels) {
+      if (totalClaim > t.min) {
+        const amt = Math.min(totalClaim, t.max) - t.min;
+        if (amt > 0) parts.push(t.label + '×' + t.rate);
+      }
+    }
+    breakdownText = parts.join(' + ');
+  } else if (totalClaim > 0) {
+    breakdownText = '≤1万:50元';
+  }
+  const feeBreakdownEl = g('otherFeeBreakdown');
+  if (feeBreakdownEl) feeBreakdownEl.textContent = breakdownText ? '(' + breakdownText + ')' : '';
+
+  // Split between plaintiff and defendant
+  let defendantRatio = 0;
+  let defendantFee = 0;
+  let plaintiffFee = litFee;
+  if (totalClaim > 0) {
+    defendantRatio = totalSupport / totalClaim;
+    defendantFee = litFee * defendantRatio;
+    plaintiffFee = litFee - defendantFee;
+  }
+  setv('otherDefendantFee', defendantFee);
+  setv('otherPlaintiffFee', plaintiffFee);
+  const dpEl = g('otherDefendantPct');
+  if (dpEl) dpEl.textContent = '(' + (defendantRatio * 100).toFixed(2) + '%)';
+  const ppEl = g('otherPlaintiffPct');
+  if (ppEl) ppEl.textContent = '(' + ((1 - defendantRatio) * 100).toFixed(2) + '%)';
+}
+
+// ═══════════════════════════════════════════════
+// Excel 导出
+// ═══════════════════════════════════════════════
+
+async function exportExcel() {
+  if (typeof ExcelJS === 'undefined') {
+    alert('ExcelJS 库未加载，请检查网络连接后刷新页面重试。\n首次使用需要联网加载 Excel 导出库。');
+    return;
+  }
+  try {
+    const plaintiff = plaintiffName || '未知原告';
+    const defaultName = plaintiff + '机动车交通事故责任纠纷赔偿计算表.xlsx';
+
+    // Recalculate first
+    autoCalc();
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = '交通事故赔偿计算器';
+    wb.created = new Date();
+
+    const moneyFmt = '#,##0.00';
+    const hFont = { name: 'Microsoft YaHei', size: 11, bold: true };
+    const dFont = { name: 'Microsoft YaHei', size: 11 };
+    const thinBorder = { style: 'thin', color: { argb: 'FF000000' } };
+    const border = {
+      top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder
+    };
+
+    // Collect values
+    const medClaim = MEDICAL_ITEMS.reduce((s, i) => s + val('med_' + i + '_claim'), 0);
+    const medSupport = MEDICAL_ITEMS.reduce((s, i) => s + val('med_' + i + '_support'), 0);
+    const deathClaim = DEATH_ITEMS.reduce((s, i) => s + val('death_' + i + '_claim'), 0) + val('death_交通费_claim');
+    const deathSupport = DEATH_ITEMS.reduce((s, i) => s + val('death_' + i + '_support'), 0) + val('death_交通费_support');
+    const propClaim = PROPERTY_ITEMS.reduce((s, i) => s + val('prop_' + i + '_claim'), 0);
+    const propSupport = PROPERTY_ITEMS.reduce((s, i) => s + val('prop_' + i + '_support'), 0);
+    const jqMed = val('jqMedical');
+    const jqDeath = val('jqDeath');
+    const jqProp = val('jqProperty');
+    const totalSupportV = val('finalTotalSupport');
+    const afterJqV = val('finalAfterJq');
+    const defendantPayV = val('finalDefendantPay');
+    const advV = val('finalAdvance');
+    const actualPayV = val('finalActualPay');
+    const lossNoRespV = val('finalLossNoResp');
+    const ratioV = val('finalRatio') / 100;
+    const appraisalV = val('otherAppraisal');
+    const thirdPartyV = val('otherThirdParty');
+    const afterMed = Math.max(0, medSupport - jqMed);
+    const afterDeath = Math.max(0, deathSupport - jqDeath);
+    const afterProp = Math.max(0, propSupport - jqProp);
+
+    // ═══════════════════════
+    // Sheet 1: 赔偿汇总
+    // ═══════════════════════
+    const ws = wb.addWorksheet('赔偿汇总');
+    const colWidths = [16, 15, 15, 5, 16, 15, 15, 5, 14, 15, 15, 5, 5, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15];
+    colWidths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+    // Headers
+    const hData = [
+      [1, 1, '医疗费类'], [1, 2, '原告要求'], [1, 3, '本院支持'],
+      [1, 5, '死亡伤残赔偿金类'], [1, 6, '原告要求'], [1, 7, '本院支持'],
+      [1, 9, '财产类'], [1, 10, '原告要求'], [1, 11, '本院支持'],
+      [1, 19, '金额']
+    ];
+    hData.forEach(([r, c, v]) => {
+      const cell = ws.getCell(r, c);
+      cell.value = v; cell.font = hFont; cell.border = border;
+    });
+    for (let c = 1; c <= 26; c++) ws.getCell(1, c).border = border;
+
+    // Data rows
+    const rowsLayout = [
+      [2, '医疗费', '护理费', '财产损失'],
+      [3, '住院伙食补助费', '误工费', null],
+      [4, '营养费', '残疾赔偿金', null],
+      [5, null, '被扶养人生活费', null],
+      [6, null, '精神损害抚慰金', null],
+      [7, null, '交通费', null],
+      [8, null, '护理用品费', null],
+    ];
+
+    rowsLayout.forEach(([r, medItem, deathItem, propItem]) => {
+      if (medItem) {
+        ws.getCell(r, 1).value = medItem; ws.getCell(r, 1).font = dFont;
+        ws.getCell(r, 2).value = val('med_' + medItem + '_claim'); ws.getCell(r, 2).numFmt = moneyFmt;
+        ws.getCell(r, 3).value = val('med_' + medItem + '_support'); ws.getCell(r, 3).numFmt = moneyFmt;
+      }
+      if (deathItem) {
+        ws.getCell(r, 5).value = deathItem; ws.getCell(r, 5).font = dFont;
+        ws.getCell(r, 6).value = val('death_' + deathItem + '_claim'); ws.getCell(r, 6).numFmt = moneyFmt;
+        ws.getCell(r, 7).value = val('death_' + deathItem + '_support'); ws.getCell(r, 7).numFmt = moneyFmt;
+      }
+      if (propItem) {
+        ws.getCell(r, 9).value = propItem; ws.getCell(r, 9).font = dFont;
+        ws.getCell(r, 10).value = val('prop_' + propItem + '_claim'); ws.getCell(r, 10).numFmt = moneyFmt;
+        ws.getCell(r, 11).value = val('prop_' + propItem + '_support'); ws.getCell(r, 11).numFmt = moneyFmt;
+      }
+      for (let c = 1; c <= 11; c++) ws.getCell(r, c).border = border;
+    });
+
+    // Total row
+    const tr = 10;
+    ws.getCell(tr, 1).value = '合计'; ws.getCell(tr, 1).font = hFont;
+    ws.getCell(tr, 2).value = medClaim; ws.getCell(tr, 2).numFmt = moneyFmt; ws.getCell(tr, 2).font = hFont;
+    ws.getCell(tr, 3).value = medSupport; ws.getCell(tr, 3).numFmt = moneyFmt; ws.getCell(tr, 3).font = hFont;
+    ws.getCell(tr, 5).value = deathClaim; ws.getCell(tr, 5).numFmt = moneyFmt; ws.getCell(tr, 5).font = hFont;
+    ws.getCell(tr, 6).value = deathSupport; ws.getCell(tr, 6).numFmt = moneyFmt; ws.getCell(tr, 6).font = hFont;
+    ws.getCell(tr, 9).value = propClaim; ws.getCell(tr, 9).numFmt = moneyFmt; ws.getCell(tr, 9).font = hFont;
+    ws.getCell(tr, 10).value = propSupport; ws.getCell(tr, 10).numFmt = moneyFmt; ws.getCell(tr, 10).font = hFont;
+    for (let c = 1; c <= 11; c++) ws.getCell(tr, c).border = border;
+
+    // Bottom calc area
+    const calcStart = 12;
+    const litFee = calcLitigationFee(medClaim + deathClaim + propClaim);
+    let defFeeLit = 0, plaFeeLit = litFee;
+    const totalClaimSum = medClaim + deathClaim + propClaim;
+    if (totalClaimSum > 0) {
+      defFeeLit = litFee * (medSupport + deathSupport + propSupport) / totalClaimSum;
+      plaFeeLit = litFee - defFeeLit;
+    }
+    const calcItems = [
+      [12, 10, '损失不分责', lossNoRespV],
+      [13, 10, '被告支付', defendantPayV],
+      [14, 10, '总计支持', totalSupportV],
+      [15, 10, '诉讼费（分段累计）', litFee],
+      [16, 10, '被告负担诉讼费', defFeeLit],
+      [17, 10, '原告负担诉讼费', plaFeeLit],
+    ];
+    calcItems.forEach(([r, c, lbl, val]) => {
+      ws.getCell(r, 9).value = lbl; ws.getCell(r, 9).font = dFont; ws.getCell(r, 9).border = border;
+      ws.getCell(r, 10).value = val; ws.getCell(r, 10).font = dFont; ws.getCell(r, 10).numFmt = moneyFmt; ws.getCell(r, 10).border = border;
+    });
+
+    // Right side params
+    const rightItems = [
+      ['交强险扣除(医疗)', jqMed],
+      ['交强险扣除(伤残)', jqDeath],
+      ['交强险扣除(财产)', jqProp],
+      ['扣除交强险后余额', afterJqV],
+      ['承担比例', ratioV],
+      ['被告应赔偿', defendantPayV],
+      ['被告垫付', advV],
+      ['实际支付原告', actualPayV],
+      ['原告诉请总额', totalClaimSum],
+      ['法院支持总额', totalSupportV],
+    ];
+    rightItems.forEach(([lbl, val], i) => {
+      const r = calcStart + i;
+      ws.getCell(r, 14).value = lbl; ws.getCell(r, 14).font = dFont; ws.getCell(r, 14).border = border;
+      ws.getCell(r, 15).value = val; ws.getCell(r, 15).font = dFont;
+      ws.getCell(r, 15).numFmt = i === 4 ? '0%' : moneyFmt;
+      ws.getCell(r, 15).border = border;
+    });
+
+    // Extra: appraisal, third party
+    const extraR = calcStart + rightItems.length + 1;
+    [['鉴定费', appraisalV], ['原告三者险应得', thirdPartyV]].forEach(([lbl, val], i) => {
+      ws.getCell(extraR + i, 14).value = lbl; ws.getCell(extraR + i, 14).font = dFont; ws.getCell(extraR + i, 14).border = border;
+      ws.getCell(extraR + i, 15).value = val; ws.getCell(extraR + i, 15).font = dFont; ws.getCell(extraR + i, 15).numFmt = moneyFmt; ws.getCell(extraR + i, 15).border = border;
+    });
+
+    // ═══════════════════════
+    // Sheet 2: 医疗费类明细
+    // ═══════════════════════
+    const wsMed = wb.addWorksheet('医疗费类明细');
+    ['A', 'B', 'C', 'D', 'E'].forEach((l, i) => { wsMed.getColumn(l).width = [20, 15, 15, 15, 15][i]; });
+
+    // Header
+    ['项目', '原告要求', '本院支持'].forEach((h, i) => {
+      wsMed.getCell(1, i + 1).value = h; wsMed.getCell(1, i + 1).font = hFont; wsMed.getCell(1, i + 1).border = border;
+    });
+
+    // 医疗费
+    wsMed.getCell(2, 1).value = '医疗费'; wsMed.getCell(2, 1).font = dFont; wsMed.getCell(2, 1).border = border;
+    wsMed.getCell(2, 2).value = val('med_医疗费_claim'); wsMed.getCell(2, 2).numFmt = moneyFmt; wsMed.getCell(2, 2).font = dFont; wsMed.getCell(2, 2).border = border;
+    wsMed.getCell(2, 3).value = val('med_医疗费_support'); wsMed.getCell(2, 3).numFmt = moneyFmt; wsMed.getCell(2, 3).font = dFont; wsMed.getCell(2, 3).border = border;
+
+    // Detail rows
+    wsMed.getCell(3, 1).value = '  逐笔明细'; wsMed.getCell(3, 1).font = dFont; wsMed.getCell(3, 1).border = border;
+    wsMed.getCell(3, 2).value = '日期'; wsMed.getCell(3, 2).font = hFont; wsMed.getCell(3, 2).border = border;
+    wsMed.getCell(3, 3).value = '金额'; wsMed.getCell(3, 3).font = hFont; wsMed.getCell(3, 3).border = border;
+
+    const detailRows = document.querySelectorAll('#medDetailRows .detail-row');
+    let medRow = 4;
+    detailRows.forEach(row => {
+      const inputs = row.querySelectorAll('input');
+      const dateVal = inputs[0] ? inputs[0].value : '';
+      const amtVal = inputs[1] ? parseFloat(inputs[1].value) || 0 : 0;
+      wsMed.getCell(medRow, 2).value = dateVal || ''; wsMed.getCell(medRow, 2).font = dFont; wsMed.getCell(medRow, 2).border = border;
+      wsMed.getCell(medRow, 3).value = amtVal; wsMed.getCell(medRow, 3).font = dFont; wsMed.getCell(medRow, 3).numFmt = moneyFmt; wsMed.getCell(medRow, 3).border = border;
+      medRow++;
+    });
+
+    // 住院伙食补助费
+    medRow++;
+    const hData2 = ['住院伙食补助费', val('med_住院伙食补助费_claim'), val('med_住院伙食补助费_support')];
+    hData2.forEach((v, i) => {
+      wsMed.getCell(medRow, i + 1).value = v; wsMed.getCell(medRow, i + 1).font = dFont; wsMed.getCell(medRow, i + 1).border = border;
+    });
+    wsMed.getCell(medRow, 2).numFmt = moneyFmt;
+    wsMed.getCell(medRow, 3).numFmt = moneyFmt;
+    const hfDays = val('hospitalFoodDays');
+    const hfRate = val('hospitalFoodRate') || 100;
+    var hfTotal = hfDays * hfRate;
+    medRow++;
+    wsMed.getCell(medRow, 1).value = '  天数: ' + hfDays + ' x ' + hfRate + '元/天 = ' + fmt(hfTotal) + '元';
+    wsMed.getCell(medRow, 1).font = dFont; wsMed.getCell(medRow, 1).border = border;
+
+    // 营养费
+    medRow++;
+    const nData = ['营养费', val('med_营养费_claim'), val('med_营养费_support')];
+    nData.forEach((v, i) => {
+      wsMed.getCell(medRow, i + 1).value = v; wsMed.getCell(medRow, i + 1).font = dFont; wsMed.getCell(medRow, i + 1).border = border;
+    });
+    wsMed.getCell(medRow, 2).numFmt = moneyFmt;
+    wsMed.getCell(medRow, 3).numFmt = moneyFmt;
+
+    // Nutrition detail
+    medRow++;
+    const nd = val('nutritionDays');
+    var nRate = val('nutritionRate') || 50;
+    var nTotal = nd * nRate;
+    wsMed.getCell(medRow, 1).value = '  天数: ' + nd + ' x ' + nRate + '元/天 = ' + fmt(nTotal) + '元';
+    wsMed.getCell(medRow, 1).font = dFont; wsMed.getCell(medRow, 1).border = border;
+    medRow++;
+    const basis = document.querySelector('input[name="nutritionBasis"]:checked');
+    wsMed.getCell(medRow, 1).value = '  依据: ' + (basis ? basis.value : '医嘱/鉴定');
+    wsMed.getCell(medRow, 1).font = dFont; wsMed.getCell(medRow, 1).border = border;
+
+    // Subtotal
+    medRow += 2;
+    ['小计', medClaim, medSupport].forEach((v, i) => {
+      wsMed.getCell(medRow, i + 1).value = v; wsMed.getCell(medRow, i + 1).font = hFont; wsMed.getCell(medRow, i + 1).border = border;
+    });
+    wsMed.getCell(medRow, 2).numFmt = moneyFmt; wsMed.getCell(medRow, 3).numFmt = moneyFmt;
+
+    medRow++;
+    ['交强险扣除', '', jqMed].forEach((v, i) => {
+      wsMed.getCell(medRow, i + 1).value = v; wsMed.getCell(medRow, i + 1).font = dFont; wsMed.getCell(medRow, i + 1).border = border;
+    });
+    wsMed.getCell(medRow, 3).numFmt = moneyFmt;
+
+    medRow++;
+    ['扣除后余额', '', afterMed].forEach((v, i) => {
+      wsMed.getCell(medRow, i + 1).value = v; wsMed.getCell(medRow, i + 1).font = hFont; wsMed.getCell(medRow, i + 1).border = border;
+    });
+    wsMed.getCell(medRow, 3).numFmt = moneyFmt;
+
+    // ═══════════════════════
+    // Sheet 3: 死亡伤残类明细
+    // ═══════════════════════
+    const wsDeath = wb.addWorksheet('死亡伤残类明细');
+    ['A', 'B', 'C', 'D', 'E'].forEach((l, i) => { wsDeath.getColumn(l).width = [22, 15, 15, 15, 15][i]; });
+
+    ['项目', '原告要求', '本院支持'].forEach((h, i) => {
+      wsDeath.getCell(1, i + 1).value = h; wsDeath.getCell(1, i + 1).font = hFont; wsDeath.getCell(1, i + 1).border = border;
+    });
+
+    // Regular death items (includes 误工费 note inline)
+    let deathRow = 2;
+    const deathRegularItems = ['护理费', '误工费', '残疾赔偿金', '被扶养人生活费', '精神损害抚慰金', '护理用品费'];
+    deathRegularItems.forEach((item) => {
+      [item, val('death_' + item + '_claim'), val('death_' + item + '_support')].forEach((v, j) => {
+        wsDeath.getCell(deathRow, j + 1).value = v; wsDeath.getCell(deathRow, j + 1).font = dFont; wsDeath.getCell(deathRow, j + 1).border = border;
+      });
+      wsDeath.getCell(deathRow, 2).numFmt = moneyFmt; wsDeath.getCell(deathRow, 3).numFmt = moneyFmt;
+      deathRow++;
+
+      // 误工费: add calc details
+      if (item === '误工费') {
+        const mode = document.querySelector('input[name="wageCalcMode"]:checked');
+        const modeLabel = mode ? mode.value : 'discretion';
+        const modeName = modeLabel === 'actual' ? '按实际工资计算' : '酌定(5000元/月)';
+        const days = val('wageDays');
+
+        wsDeath.getCell(deathRow, 1).value = '  计算方式: ' + modeName;
+        wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+        deathRow++;
+        wsDeath.getCell(deathRow, 1).value = '  误工期: ' + days + '天';
+        wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+        deathRow++;
+
+        if (modeLabel === 'actual') {
+          let totalWage = 0;
+          document.querySelectorAll('#wageDetailRows .detail-row').forEach(function(row) {
+            var inp = row.querySelectorAll('input')[1];
+            if (inp) { var v = parseFloat(inp.value); if (!isNaN(v)) totalWage += v; }
+          });
+          var totalDays = val('wageTotalDays');
+          wsDeath.getCell(deathRow, 1).value = '  总工资: ' + fmt(totalWage) + '元';
+          wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+          deathRow++;
+
+          var wageDetailRows = document.querySelectorAll('#wageDetailRows .detail-row');
+          var didx = 1;
+          wageDetailRows.forEach(function(row) {
+            var inputs = row.querySelectorAll('input');
+            var period = inputs[0] ? inputs[0].value : '';
+            var amt = inputs[1] ? parseFloat(inputs[1].value) || 0 : 0;
+            if (period || amt) {
+              wsDeath.getCell(deathRow, 1).value = '    第' + didx + '笔: ' + (period || '') + ' - ' + fmt(amt) + '元';
+              wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+              deathRow++; didx++;
+            }
+          });
+
+          wsDeath.getCell(deathRow, 1).value = '  对应工作天数合计: ' + totalDays + '天';
+          wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+          deathRow++;
+          var avgDaily = totalDays > 0 ? totalWage / totalDays : 0;
+          wsDeath.getCell(deathRow, 1).value = '  日平均工资: ' + fmt(avgDaily) + '元/天';
+          wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+          deathRow++;
+          var actualResult = avgDaily * days;
+          wsDeath.getCell(deathRow, 1).value = '  计算结果: ' + fmt(actualResult) + '元';
+          wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+          deathRow++;
+        } else {
+          var monthlyRate = val('wageMonthlyRate') || 5000;
+          var discResult = monthlyRate / 30 * days;
+          wsDeath.getCell(deathRow, 1).value = '  计算结果: ' + monthlyRate + '元/月 / 30日 * ' + days + '日 = ' + fmt(discResult) + '元';
+          wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+          deathRow++;
+        }
+
+        var noteText = g('death_误工费_note') ? g('death_误工费_note').value : '';
+        if (noteText.trim()) {
+          wsDeath.getCell(deathRow, 1).value = '  备注: ' + noteText;
+          wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+          deathRow++;
+        }
+      }
+    });
+
+    // 交通费 row
+    const trafficItems = ['交通费'];
+    trafficItems.forEach((item) => {
+      [item, val('death_' + item + '_claim'), val('death_' + item + '_support')].forEach((v, j) => {
+        wsDeath.getCell(deathRow, j + 1).value = v; wsDeath.getCell(deathRow, j + 1).font = dFont; wsDeath.getCell(deathRow, j + 1).border = border;
+      });
+      wsDeath.getCell(deathRow, 2).numFmt = moneyFmt; wsDeath.getCell(deathRow, 3).numFmt = moneyFmt;
+      deathRow++;
+    });
+
+    // Traffic detail rows
+    wsDeath.getCell(deathRow, 1).value = '  逐笔明细'; wsDeath.getCell(deathRow, 1).font = dFont; wsDeath.getCell(deathRow, 1).border = border;
+    wsDeath.getCell(deathRow, 2).value = '日期'; wsDeath.getCell(deathRow, 2).font = hFont; wsDeath.getCell(deathRow, 2).border = border;
+    wsDeath.getCell(deathRow, 3).value = '金额'; wsDeath.getCell(deathRow, 3).font = hFont; wsDeath.getCell(deathRow, 3).border = border;
+    deathRow++;
+
+    const trafficDetailRows = document.querySelectorAll('#trafficDetailRows .detail-row');
+    trafficDetailRows.forEach(row => {
+      const inputs = row.querySelectorAll('input');
+      const dateVal = inputs[0] ? inputs[0].value : '';
+      const amtVal = inputs[1] ? parseFloat(inputs[1].value) || 0 : 0;
+      wsDeath.getCell(deathRow, 2).value = dateVal || ''; wsDeath.getCell(deathRow, 2).font = dFont; wsDeath.getCell(deathRow, 2).border = border;
+      wsDeath.getCell(deathRow, 3).value = amtVal; wsDeath.getCell(deathRow, 3).font = dFont; wsDeath.getCell(deathRow, 3).numFmt = moneyFmt; wsDeath.getCell(deathRow, 3).border = border;
+      deathRow++;
+    });
+
+    // Subtotal
+    deathRow++;
+    ['小计', deathClaim, deathSupport].forEach((v, i) => {
+      wsDeath.getCell(deathRow, i + 1).value = v; wsDeath.getCell(deathRow, i + 1).font = hFont; wsDeath.getCell(deathRow, i + 1).border = border;
+    });
+    wsDeath.getCell(deathRow, 2).numFmt = moneyFmt; wsDeath.getCell(deathRow, 3).numFmt = moneyFmt;
+
+    deathRow++;
+    ['交强险扣除', '', jqDeath].forEach((v, i) => {
+      wsDeath.getCell(deathRow, i + 1).value = v; wsDeath.getCell(deathRow, i + 1).font = dFont; wsDeath.getCell(deathRow, i + 1).border = border;
+    });
+    wsDeath.getCell(deathRow, 3).numFmt = moneyFmt;
+
+    deathRow++;
+    ['扣除后余额', '', afterDeath].forEach((v, i) => {
+      wsDeath.getCell(deathRow, i + 1).value = v; wsDeath.getCell(deathRow, i + 1).font = hFont; wsDeath.getCell(deathRow, i + 1).border = border;
+    });
+    wsDeath.getCell(deathRow, 3).numFmt = moneyFmt;
+
+    // ═══════════════════════
+    // Sheet 4: 财产类明细
+    // ═══════════════════════
+    const wsProp = wb.addWorksheet('财产类明细');
+    ['A', 'B', 'C', 'D', 'E'].forEach((l, i) => { wsProp.getColumn(l).width = [20, 15, 15, 15, 15][i]; });
+
+    ['项目', '原告要求', '本院支持'].forEach((h, i) => {
+      wsProp.getCell(1, i + 1).value = h; wsProp.getCell(1, i + 1).font = hFont; wsProp.getCell(1, i + 1).border = border;
+    });
+
+    ['财产损失', val('prop_财产损失_claim'), val('prop_财产损失_support')].forEach((v, i) => {
+      wsProp.getCell(2, i + 1).value = v; wsProp.getCell(2, i + 1).font = dFont; wsProp.getCell(2, i + 1).border = border;
+    });
+    wsProp.getCell(2, 2).numFmt = moneyFmt; wsProp.getCell(2, 3).numFmt = moneyFmt;
+
+    let spr = 4;
+    ['小计', propClaim, propSupport].forEach((v, i) => {
+      wsProp.getCell(spr, i + 1).value = v; wsProp.getCell(spr, i + 1).font = hFont; wsProp.getCell(spr, i + 1).border = border;
+    });
+    wsProp.getCell(spr, 2).numFmt = moneyFmt; wsProp.getCell(spr, 3).numFmt = moneyFmt;
+
+    spr++;
+    ['交强险扣除', '', jqProp].forEach((v, i) => {
+      wsProp.getCell(spr, i + 1).value = v; wsProp.getCell(spr, i + 1).font = dFont; wsProp.getCell(spr, i + 1).border = border;
+    });
+    wsProp.getCell(spr, 3).numFmt = moneyFmt;
+
+    spr++;
+    ['扣除后余额', '', afterProp].forEach((v, i) => {
+      wsProp.getCell(spr, i + 1).value = v; wsProp.getCell(spr, i + 1).font = hFont; wsProp.getCell(spr, i + 1).border = border;
+    });
+    wsProp.getCell(spr, 3).numFmt = moneyFmt;
+
+    // ── Auto-save history on export ──
+    saveHistory();
+
+    // ── Generate & Download ──
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = defaultName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('文件已导出: ' + defaultName);
+  } catch (e) {
+    alert('导出失败: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ═══════════════════════════════════════════════
+// 自动保存（防闪退丢数据）
+// ═══════════════════════════════════════════════
+
+const SESSION_KEY = 'traffic_compensation_session';
+let sessionTimer = null;
+
+function scheduleSessionSave() {
+  if (sessionTimer) clearTimeout(sessionTimer);
+  sessionTimer = setTimeout(saveSession, 400);
+}
+
+function saveSession() {
+  const data = {
+    plaintiff: plaintiffName || '',
+    formData: collectFormData(),
+    savedAt: Date.now()
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  const el = g('autoSaveIndicator');
+  if (el) {
+    const t = new Date();
+    const ts = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0') + ':' + String(t.getSeconds()).padStart(2,'0');
+    el.textContent = '已保存 ' + ts;
+  }
+}
+
+function restoreSession() {
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return false;
+  try {
+    const data = JSON.parse(raw);
+    if (!data || !data.formData) return false;
+    if (data.plaintiff) {
+      g('plaintiffName').value = data.plaintiff;
+      plaintiffName = data.plaintiff;
+    }
+    restoreFormData(data.formData);
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// 历史记录
+// ═══════════════════════════════════════════════
+
+const HISTORY_KEY = 'traffic_compensation_history';
+
+function collectFormData() {
+  const data = {};
+
+  // Medical items
+  data.med = {};
+  MEDICAL_ITEMS.forEach(item => {
+    data.med[item] = {
+      claim: val('med_' + item + '_claim'),
+      support: val('med_' + item + '_support')
+    };
+  });
+
+  // Death items
+  data.death = {};
+  DEATH_ITEMS.forEach(item => {
+    data.death[item] = {
+      claim: val('death_' + item + '_claim'),
+      support: val('death_' + item + '_support')
+    };
+  });
+  // 交通费 (handled separately with detail rows)
+  data.death['交通费'] = {
+    claim: val('death_交通费_claim'),
+    support: val('death_交通费_support')
+  };
+  // 误工费备注
+  const noteEl = g('death_误工费_note');
+  data.death['误工费_note'] = noteEl ? noteEl.value : '';
+  // Wage calc data
+  const wageMode = document.querySelector('input[name="wageCalcMode"]:checked');
+  data.wageCalcMode = wageMode ? wageMode.value : 'discretion';
+  data.wageDays = val('wageDays');
+  data.wageTotalDays = val('wageTotalDays');
+  data.wageDetailRows = [];
+  document.querySelectorAll('#wageDetailRows .detail-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    data.wageDetailRows.push({
+      period: inputs[0] ? inputs[0].value : '',
+      amount: inputs[1] ? inputs[1].value : ''
+    });
+  });
+  // Standard rates
+  data.hospitalFoodRate = val('hospitalFoodRate') || 100;
+  data.nutritionRate = val('nutritionRate') || 50;
+  data.wageMonthlyRate = val('wageMonthlyRate') || 5000;
+
+  // Traffic detail rows
+  data.trafficDetailRows = [];
+  document.querySelectorAll('#trafficDetailRows .detail-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    data.trafficDetailRows.push({
+      date: inputs[0] ? inputs[0].value : '',
+      amount: inputs[1] ? inputs[1].value : ''
+    });
+  });
+
+  // Property items
+  data.prop = {};
+  PROPERTY_ITEMS.forEach(item => {
+    data.prop[item] = {
+      claim: val('prop_' + item + '_claim'),
+      support: val('prop_' + item + '_support')
+    };
+  });
+
+  // Medical detail rows
+  data.medDetailRows = [];
+  document.querySelectorAll('#medDetailRows .detail-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    data.medDetailRows.push({
+      date: inputs[0] ? inputs[0].value : '',
+      amount: inputs[1] ? inputs[1].value : ''
+    });
+  });
+
+  // Nutrition
+  data.nutritionDays = val('nutritionDays');
+  const basisEl = document.querySelector('input[name="nutritionBasis"]:checked');
+  data.nutritionBasis = basisEl ? basisEl.value : '医嘱/鉴定';
+
+  // 住院伙食补助费
+  data.hospitalFoodDays = val('hospitalFoodDays');
+  const hfMode = document.querySelector('input[name="hospitalFoodMode"]:checked');
+  data.hospitalFoodMode = hfMode ? hfMode.value : 'days';
+
+  // Jiao Qiang
+  data.jqMedical = val('jqMedical');
+  data.jqDeath = val('jqDeath');
+  data.jqProperty = val('jqProperty');
+
+  // Final calc
+  data.finalLossNoResp = val('finalLossNoResp');
+  data.finalRatio = val('finalRatio');
+  data.finalAdvance = val('finalAdvance');
+
+  // Other
+  data.otherAppraisal = val('otherAppraisal');
+  data.otherThirdParty = val('otherThirdParty');
+
+  return data;
+}
+
+function restoreFormData(data) {
+  // Medical items
+  MEDICAL_ITEMS.forEach(item => {
+    if (data.med && data.med[item]) {
+      setv('med_' + item + '_claim', data.med[item].claim);
+      if (item !== '医疗费' && item !== '营养费' && item !== '住院伙食补助费') {
+        setv('med_' + item + '_support', data.med[item].support);
+      }
+    }
+  });
+
+  // Death items
+  DEATH_ITEMS.forEach(item => {
+    if (data.death && data.death[item]) {
+      setv('death_' + item + '_claim', data.death[item].claim);
+      setv('death_' + item + '_support', data.death[item].support);
+    }
+  });
+  // 交通费 (handled separately)
+  if (data.death && data.death['交通费']) {
+    setv('death_交通费_claim', data.death['交通费'].claim);
+  }
+  // 误工费备注
+  if (data.death && data.death['误工费_note'] !== undefined) {
+    const noteEl = g('death_误工费_note');
+    if (noteEl) noteEl.value = data.death['误工费_note'];
+  }
+  // Wage calc
+  if (data.wageCalcMode) {
+    document.querySelectorAll('input[name="wageCalcMode"]').forEach(el => {
+      el.checked = el.value === data.wageCalcMode;
+    });
+  }
+  if (data.wageDays !== undefined) { const el = g('wageDays'); if (el) el.value = data.wageDays; }
+  if (data.wageTotalDays !== undefined) { const el = g('wageTotalDays'); if (el) el.value = data.wageTotalDays; }
+  const wdr = document.getElementById('wageDetailRows');
+  if (wdr) {
+    wdr.innerHTML = '';
+    if (data.wageDetailRows && data.wageDetailRows.length > 0) {
+      data.wageDetailRows.forEach(r => addWageDetailRow(r.period, r.amount));
+    }
+  }
+  // Re-run wage calc display
+  updateWageCalcMode();
+  // Standard rates
+  if (data.hospitalFoodRate) { const el = g('hospitalFoodRate'); if (el) el.value = data.hospitalFoodRate; }
+  if (data.nutritionRate) { const el = g('nutritionRate'); if (el) el.value = data.nutritionRate; }
+  if (data.wageMonthlyRate) { const el = g('wageMonthlyRate'); if (el) el.value = data.wageMonthlyRate; }
+  // Traffic detail rows
+  document.getElementById('trafficDetailRows').innerHTML = '';
+  if (data.trafficDetailRows && data.trafficDetailRows.length > 0) {
+    data.trafficDetailRows.forEach(r => addTrafficDetailRow(r.date, r.amount));
+  }
+
+  // Property items
+  PROPERTY_ITEMS.forEach(item => {
+    if (data.prop && data.prop[item]) {
+      setv('prop_' + item + '_claim', data.prop[item].claim);
+      setv('prop_' + item + '_support', data.prop[item].support);
+    }
+  });
+
+  // Clear and rebuild medical detail rows
+  document.getElementById('medDetailRows').innerHTML = '';
+  if (data.medDetailRows && data.medDetailRows.length > 0) {
+    data.medDetailRows.forEach(r => addMedDetailRow(r.date, r.amount));
+  } else {
+    addMedDetailRow();
+  }
+
+  // Nutrition
+  if (data.nutritionDays !== undefined) {
+    g('nutritionDays').value = data.nutritionDays;
+    // Set radio
+    if (data.nutritionBasis) {
+      document.querySelectorAll('input[name="nutritionBasis"]').forEach(el => {
+        el.checked = el.value === data.nutritionBasis;
+      });
+    }
+    updateNutrition();
+  }
+
+  // 住院伙食补助费
+  if (data.hospitalFoodDays !== undefined) g('hospitalFoodDays').value = data.hospitalFoodDays;
+  if (data.hospitalFoodMode) {
+    document.querySelectorAll('input[name="hospitalFoodMode"]').forEach(el => {
+      el.checked = el.value === data.hospitalFoodMode;
+    });
+  }
+  updateHospitalFood();
+  // In manual mode, restore saved support value
+  if (data.hospitalFoodMode === 'manual' && data.med && data.med['住院伙食补助费']) {
+    setv('med_住院伙食补助费_support', data.med['住院伙食补助费'].support);
+  }
+
+  // Jiao Qiang
+  if (data.jqMedical !== undefined) setv('jqMedical', data.jqMedical);
+  if (data.jqDeath !== undefined) setv('jqDeath', data.jqDeath);
+  if (data.jqProperty !== undefined) setv('jqProperty', data.jqProperty);
+
+  // Final calc
+  if (data.finalLossNoResp !== undefined) g('finalLossNoResp').value = data.finalLossNoResp;
+  if (data.finalRatio !== undefined) g('finalRatio').value = data.finalRatio;
+  if (data.finalAdvance !== undefined) g('finalAdvance').value = data.finalAdvance;
+
+  // Other
+  if (data.otherAppraisal !== undefined) g('otherAppraisal').value = data.otherAppraisal;
+  if (data.otherThirdParty !== undefined) g('otherThirdParty').value = data.otherThirdParty;
+
+  // Recalculate
+  autoCalc();
+}
+
+function saveHistory() {
+  const records = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  const now = new Date();
+  const timeStr = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0') + ' ' +
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0') + ':' +
+    String(now.getSeconds()).padStart(2,'0');
+
+  const record = {
+    id: Date.now(),
+    plaintiff: plaintiffName || '未知原告',
+    savedAt: timeStr,
+    data: collectFormData()
+  };
+
+  // Add summary info for display
+  const medSupport = MEDICAL_ITEMS.reduce((s, i) => s + (record.data.med[i] ? record.data.med[i].support : 0), 0);
+  const deathSupport = DEATH_ITEMS.reduce((s, i) => s + (record.data.death[i] ? record.data.death[i].support : 0), 0);
+  const propSupport = PROPERTY_ITEMS.reduce((s, i) => s + (record.data.prop[i] ? record.data.prop[i].support : 0), 0);
+  record.summary = '医疗费类: ' + fmt(medSupport) + ' | 死亡伤残类: ' + fmt(deathSupport) + ' | 财产类: ' + fmt(propSupport);
+
+  records.unshift(record);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(records));
+  loadHistoryList();
+  alert('记录已保存');
+}
+
+function loadHistoryList() {
+  const container = document.getElementById('historyList');
+  const records = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+
+  if (records.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--text-secondary);font-size:14px;">暂无历史记录，导出 Excel 或点击"保存当前记录"将自动保存。</div>';
+    return;
+  }
+
+  let html = '';
+  records.forEach(rec => {
+    html += '<div class="history-item">' +
+      '<div class="history-info">' +
+        '<div class="h-time">' + rec.savedAt + '</div>' +
+        '<div class="h-name">原告: ' + rec.plaintiff + '</div>' +
+        '<div class="h-summary">' + (rec.summary || '') + '</div>' +
+      '</div>' +
+      '<div class="history-actions">' +
+        '<button class="load-btn" onclick="restoreHistory(' + rec.id + ')">载入</button>' +
+        '<button class="del-btn" onclick="deleteHistory(' + rec.id + ')">删除</button>' +
+      '</div>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function restoreHistory(id) {
+  if (!confirm('将用该历史记录填充表单，当前未保存的数据将丢失。确定载入？')) return;
+  const records = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  const rec = records.find(r => r.id === id);
+  if (!rec) { alert('记录未找到'); return; }
+
+  // Set plaintiff name
+  if (rec.plaintiff && rec.plaintiff !== '未知原告') {
+    g('plaintiffName').value = rec.plaintiff;
+    plaintiffName = rec.plaintiff;
+  }
+
+  // Restore all form data
+  restoreFormData(rec.data);
+
+  alert('记录已载入，请检查各选项卡数据。');
+  saveSession();
+}
+
+function deleteHistory(id) {
+  if (!confirm('确定删除此记录？')) return;
+  let records = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  records = records.filter(r => r.id !== id);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(records));
+  loadHistoryList();
+}
+
+// ── Template Management ──
+
+const TEMPLATE_KEY = 'traffic_compensation_templates';
+
+function getCurrentRates() {
+  return {
+    hospitalFoodRate: val('hospitalFoodRate') || 100,
+    nutritionRate: val('nutritionRate') || 50,
+    wageMonthlyRate: val('wageMonthlyRate') || 5000
+  };
+}
+
+function applyRates(rates) {
+  if (rates.hospitalFoodRate) { var el = g('hospitalFoodRate'); if (el) el.value = rates.hospitalFoodRate; }
+  if (rates.nutritionRate) { var el = g('nutritionRate'); if (el) el.value = rates.nutritionRate; }
+  if (rates.wageMonthlyRate) { var el = g('wageMonthlyRate'); if (el) el.value = rates.wageMonthlyRate; }
+  updateHospitalFood();
+  updateNutrition();
+  updateWageDiscretion();
+  scheduleSessionSave();
+}
+
+function saveCurrentTemplate() {
+  var name = g('templateNameInput').value.trim();
+  if (!name) { alert('请输入模板名称'); return; }
+  var templates = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]');
+  for (var i = 0; i < templates.length; i++) {
+    if (templates[i].name === name) {
+      if (!confirm('模板 "' + name + '" 已存在，是否覆盖？')) return;
+      templates.splice(i, 1);
+      break;
+    }
+  }
+  var now = new Date();
+  var timeStr = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0') + ' ' +
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0');
+  templates.unshift({
+    name: name,
+    savedAt: timeStr,
+    rates: getCurrentRates()
+  });
+  localStorage.setItem(TEMPLATE_KEY, JSON.stringify(templates));
+  g('templateNameInput').value = '';
+  renderTemplateList();
+  alert('模板 "' + name + '" 已保存');
+}
+
+function loadTemplate(name) {
+  var templates = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]');
+  var found = null;
+  for (var i = 0; i < templates.length; i++) {
+    if (templates[i].name === name) { found = templates[i]; break; }
+  }
+  if (!found) return;
+  applyRates(found.rates);
+  closeTemplateModal();
+}
+
+function deleteTemplate(name) {
+  if (!confirm('确定删除模板 "' + name + '"？')) return;
+  var templates = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]');
+  for (var i = 0; i < templates.length; i++) {
+    if (templates[i].name === name) { templates.splice(i, 1); break; }
+  }
+  localStorage.setItem(TEMPLATE_KEY, JSON.stringify(templates));
+  renderTemplateList();
+}
+
+function renderTemplateList() {
+  var container = g('templateList');
+  if (!container) return;
+  var templates = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]');
+  if (templates.length === 0) {
+    container.innerHTML = '<div class="tpl-empty">暂无模板，请先保存</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < templates.length; i++) {
+    var t = templates[i];
+    var preview = '伙食补助 ' + t.rates.hospitalFoodRate + '元/天 | 营养费 ' + t.rates.nutritionRate + '元/天 | 误工费 ' + t.rates.wageMonthlyRate + '元/月';
+    html += '<div class="tpl-item">' +
+      '<div class="tpl-info">' +
+        '<div class="tpl-name">' + t.name + '</div>' +
+        '<div class="tpl-time">' + t.savedAt + '</div>' +
+        '<div class="tpl-preview">' + preview + '</div>' +
+      '</div>' +
+      '<div class="tpl-actions">' +
+        '<button class="tpl-load" onclick="loadTemplate(\'' + t.name.replace(/'/g, "\\'") + '\')">载入</button>' +
+        '<button class="tpl-del" onclick="deleteTemplate(\'' + t.name.replace(/'/g, "\\'") + '\')">删除</button>' +
+      '</div>' +
+    '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function openTemplateModal() {
+  renderTemplateList();
+  g('templateModal').style.display = '';
+}
+
+function closeTemplateModal() {
+  g('templateModal').style.display = 'none';
+}
+
+// ── Initialize ──
+// Try restoring auto-saved session first
+const sessionRestored = restoreSession();
+if (!sessionRestored) {
+  addMedDetailRow();
+  addTrafficDetailRow();
+  addWageDetailRow();
+}
+updateHospitalFood();
+updateWageCalcMode();
+updateJqLimits();
+autoCalc();
+loadHistoryList();
+// Show initial save indicator if session was restored
+if (sessionRestored) saveSession();
+</script>
+</body>
+</html>
